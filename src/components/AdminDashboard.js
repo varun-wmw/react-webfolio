@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { firestore } from './firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import './AdminDashboard.css';
+import { saveAs } from 'file-saver'; // install with npm install file-saver
+import { format } from 'date-fns';
 
 const AdminDashboard = () => {
   const [sessions, setSessions] = useState([]);
@@ -11,6 +13,7 @@ const AdminDashboard = () => {
   const [filterEmployee, setFilterEmployee] = useState('');
   const [selectedScreenshots, setSelectedScreenshots] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [expandedScreenshot, setExpandedScreenshot] = useState(null); // N
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -27,6 +30,7 @@ const AdminDashboard = () => {
         console.error("Error fetching user data:", error);
       }
     };
+
 
     const fetchSessions = async () => {
       setLoading(true);
@@ -75,6 +79,60 @@ const AdminDashboard = () => {
     fetchSessions();
   }, [filterDate, filterEmployee]);
 
+  const fetchEmployeeLogs = async (userId) => {
+    const sessionsQuery = query(
+      collection(firestore, 'work_sessions'),
+      where('userId', '==', userId),
+      orderBy('clockInTime', 'desc')
+    );
+    
+    const sessionsSnapshot = await getDocs(sessionsQuery);
+    const sessions = [];
+  
+    for (const doc of sessionsSnapshot.docs) {
+      const data = doc.data();
+      const screenshots = await getDocs(collection(doc.ref, 'screenshots'));
+      const screenshotUrls = screenshots.docs.map(snap => snap.data().url);
+  
+      sessions.push({
+        sessionId: doc.id,
+        clockInTime: format(data.clockInTime.toDate(), 'yyyy-MM-dd HH:mm:ss'),
+        clockOutTime: data.clockOutTime ? format(data.clockOutTime.toDate(), 'yyyy-MM-dd HH:mm:ss') : 'Ongoing',
+        breakTime: data.breakTime,
+        screenshots: screenshotUrls,
+      });
+    }
+  
+    return sessions;
+  };
+
+  const convertToCSV = (sessions) => {
+    const headers = ['Session ID', 'Clock In Time', 'Clock Out Time', 'Break Time (mins)', 'Screenshot URLs'];
+    const rows = sessions.map(session => [
+      session.sessionId,
+      session.clockInTime,
+      session.clockOutTime,
+      session.breakTime || '0',
+      session.screenshots.join(', '), // Join URLs with commas
+    ]);
+  
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    return csvContent;
+  };
+
+  const downloadEmployeeLogs = async (userId, employeeName) => {
+    try {
+      const logs = await fetchEmployeeLogs(userId);
+      const csvData = convertToCSV(logs);
+  
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      saveAs(blob, `${employeeName}_activity_logs.csv`);
+    } catch (error) {
+      console.error("Error downloading logs:", error);
+    }
+  };
+
+
   const calculateDuration = (start, end) => {
     if (!start || !end) return 'Ongoing';
     const duration = (new Date(end) - new Date(start)) / 1000 / 60;
@@ -92,6 +150,15 @@ const AdminDashboard = () => {
     setIsModalOpen(false);
     setSelectedScreenshots([]);
   };
+
+  const openExpandedView = (screenshot) => {
+    setExpandedScreenshot(screenshot);
+  };
+
+  const closeExpandedView = () => {
+    setExpandedScreenshot(null);
+  };
+
   return (
     <div className="admin-dashboard">
       <h2>Admin Dashboard</h2>
@@ -129,25 +196,29 @@ const AdminDashboard = () => {
             </tr>
           </thead>
           <tbody>
-            {sessions.map(session => {
-              const employeeName = users[session.userId] || 'Unknown';
-              return (
-                <tr key={session.id}>
-                  <td>{employeeName}</td>
-                  <td>{session.userId}</td>
-                  <td>{session.clockInTime ? session.clockInTime.toDate().toLocaleString() : 'N/A'}</td>
-                  <td>{session.clockOutTime ? session.clockOutTime.toDate().toLocaleString() : 'Ongoing'}</td>
-                  <td>{calculateDuration(session.clockInTime ? session.clockInTime.toDate() : null, session.clockOutTime ? session.clockOutTime.toDate() : null)}</td>
-                  <td>{session.breakTime ? `${session.breakTime} minutes` : '0 minutes'}</td>
-                  <td>
-                    <button onClick={() => openScreenshotModal(session.screenshots)}>
-                      View Screenshots
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+  {sessions.map(session => {
+    const employeeName = users[session.userId] || 'Unknown';
+    return (
+      <tr key={session.id}>
+        <td>{employeeName}</td>
+        <td>{session.userId}</td>
+        <td>{session.clockInTime ? session.clockInTime.toDate().toLocaleString() : 'N/A'}</td>
+        <td>{session.clockOutTime ? session.clockOutTime.toDate().toLocaleString() : 'Ongoing'}</td>
+        <td>{calculateDuration(session.clockInTime ? session.clockInTime.toDate() : null, session.clockOutTime ? session.clockOutTime.toDate() : null)}</td>
+        <td>{session.breakTime ? `${session.breakTime} minutes` : '0 minutes'}</td>
+        <td>
+          <button onClick={() => openScreenshotModal(session.screenshots)}>
+            View Screenshots
+          </button>
+          <button onClick={() => downloadEmployeeLogs(session.userId, employeeName)}
+            className="download-button">
+            Download Logs
+          </button>
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
         </table>
       )}
 
@@ -156,17 +227,25 @@ const AdminDashboard = () => {
         <div className="modal">
           <div className="modal-content">
             <button className="close-button" onClick={closeModal}>Close</button>
-            <div className="screenshot-popup-container">
+            <div className="screenshot-grid">
               {selectedScreenshots.map((screenshot, index) => (
                 <img
                   key={index}
                   src={screenshot.url}
                   alt="Screenshot"
                   className="screenshot-thumbnail"
+                  onClick={() => openExpandedView(screenshot)}
                 />
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Expanded Screenshot View */}
+      {expandedScreenshot && (
+        <div className="expanded-view-overlay" onClick={closeExpandedView}>
+          <img src={expandedScreenshot.url} alt="Expanded Screenshot" className="expanded-screenshot" />
         </div>
       )}
     </div>
