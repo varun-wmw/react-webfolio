@@ -1,0 +1,59 @@
+/* Navbar container styling */
+nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #333;
+    padding: 10px 20px;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+  
+  /* Title/Logo styling */
+  nav h2 {
+    margin: 0;
+    font-size: 24px;
+    color: #f4f4f4;
+  }
+  
+  /* Links styling */
+  nav a {
+    margin: 0 15px;
+    color: #f4f4f4;
+    text-decoration: none;
+    font-size: 16px;
+    transition: color 0.3s ease;
+  }
+  
+  nav a:hover {
+    color: #ffdd57; /* Optional: highlight color on hover */
+  }
+  
+  /* Logout button styling */
+  nav button {
+    background-color: #ff5757;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  nav button:hover {
+    background-color: #ff3232;
+  }
+  
+  /* Responsive styling for smaller screens */
+  @media (max-width: 600px) {
+    nav {
+      flex-direction: column;
+      text-align: center;
+    }
+  
+    nav a,
+    nav button {
+      margin: 8px 0;
+    }
+  }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { firestore } from './firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import './AdminDashboard.css';
 
 const AdminDashboard = () => {
   const [sessions, setSessions] = useState([]);
@@ -86,10 +87,10 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div>
+    <div className="admin-dashboard">
       <h2>Admin Dashboard</h2>
       
-      <div>
+      <div className="filters">
         <label>Filter by Date:</label>
         <input
           type="date"
@@ -133,14 +134,13 @@ const AdminDashboard = () => {
                   <td>{calculateDuration(session.clockInTime ? session.clockInTime.toDate() : null, session.clockOutTime ? session.clockOutTime.toDate() : null)}</td>
                   <td>{session.breakTime ? `${session.breakTime} minutes` : '0 minutes'}</td>
                   <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                    <div className="screenshot-container">
                       {session.screenshots && session.screenshots.length > 0 ? (
                         session.screenshots.map((screenshot, index) => (
                           <img
                             key={index}
                             src={screenshot.url}
                             alt="Screenshot"
-                            style={{ width: '100px', height: '75px', margin: '5px', border: '1px solid #ccc' }}
                           />
                         ))
                       ) : (

@@ -1,7 +1,7 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
-const path = require('path');
-const fs = require('fs');
+import { app, BrowserWindow, ipcMain, desktopCapturer } from 'electron';
+import path from 'path';
+import fs from 'fs';
 
 let mainWindow;
 let clockInWindow;

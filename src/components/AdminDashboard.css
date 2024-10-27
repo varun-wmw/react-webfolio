@@ -1,0 +1,86 @@
+.admin-dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+  }
+  
+  .admin-dashboard h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+    color: #333;
+  }
+  
+  /* Filters section styling */
+  .admin-dashboard .filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    justify-content: center;
+  }
+  
+  .filters label {
+    font-weight: bold;
+    color: #555;
+  }
+  
+  .filters input[type="date"],
+  .filters input[type="text"] {
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  /* Table styling */
+  .admin-dashboard table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  .admin-dashboard th,
+  .admin-dashboard td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+  }
+  
+  .admin-dashboard th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+    color: #555;
+  }
+  
+  .admin-dashboard td {
+    font-size: 14px;
+    color: #333;
+  }
+  
+  /* Screenshot container */
+  .screenshot-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+  }
+  
+  .screenshot-container img {
+    width: 80px;
+    height: 60px;
+    margin: 3px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    transition: transform 0.3s ease;
+  }
+  
+  .screenshot-container img:hover {
+    transform: scale(1.1);
+    border-color: #666;
+  }
+  
+  /* Loading and no-data messages */
+  .admin-dashboard p {
+    text-align: center;
+    color: #888;
+  }

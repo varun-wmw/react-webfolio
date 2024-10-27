@@ -14,6 +14,7 @@ import {
   getDoc 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import './Dashboard.css';
 
 const Dashboard = () => {
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -188,33 +189,36 @@ const Dashboard = () => {
   };
 
   return (
-    <div>
+    <div className="dashboard">
       <h2>Dashboard</h2>
       {isClockedIn ? (
         <>
-          <button onClick={clockOut}>Clock Out</button>
+          <button onClick={clockOut} className="clock-out-btn">Clock Out</button>
           {isOnBreak ? (
-            <button onClick={endBreak}>End Break</button>
+            <button onClick={endBreak} className="break-btn">End Break</button>
           ) : (
-            <button onClick={startBreak}>Start Break</button>
+            <button onClick={startBreak} className="break-btn">Start Break</button>
           )}
         </>
       ) : (
-        <button onClick={clockIn}>Clock In</button>
+        <button onClick={clockIn} className="clock-in-btn">Clock In</button>
       )}
 
-      <h3>Session History</h3>
-      <ul>
-        {sessionHistory.map((session) => (
-          <li key={session.id}>
-            <p>Clock In: {new Date(session.clockInTime.seconds * 1000).toLocaleString()}</p>
-            <p>Clock Out: {session.clockOutTime ? new Date(session.clockOutTime.seconds * 1000).toLocaleString() : 'Ongoing'}</p>
-            <p>Total Break Time: {session.breakTime ? `${Math.floor(session.breakTime / 60)} mins` : '0 mins'}</p>
-          </li>
-        ))}
-      </ul>
+      <div className="session-history">
+        <h3>Session History</h3>
+        <ul>
+          {sessionHistory.map((session) => (
+            <li key={session.id}>
+              <p>Clock In: {new Date(session.clockInTime.seconds * 1000).toLocaleString()}</p>
+              <p>Clock Out: {session.clockOutTime ? new Date(session.clockOutTime.seconds * 1000).toLocaleString() : 'Ongoing'}</p>
+              <p>Total Break Time: {session.breakTime ? `${Math.floor(session.breakTime / 60)} mins` : '0 mins'}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 };
+
 
 export default Dashboard;
