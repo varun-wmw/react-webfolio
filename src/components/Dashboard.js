@@ -15,6 +15,8 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import './Dashboard.css';
+import { onAuthStateChanged } from 'firebase/auth'; // Add this import
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -22,17 +24,80 @@ const Dashboard = () => {
   const [sessionId, setSessionId] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [captureInterval, setCaptureInterval] = useState(null);
+  const [currentDuration, setCurrentDuration] = useState(0);
+  const [currentBreakDuration, setCurrentBreakDuration] = useState(0);
+  const [user, setUser] = useState(null);
+  const [electronAvailable, setElectronAvailable] = useState(false);
+  const navigate = useNavigate();
+
+  // In Dashboard.js at the top
+const isElectron = () => {
+  return window.electron !== undefined;
+};
+
+
+  // useEffect(() => {
+  //   fetchSessionHistory();
+  //   return () => {
+  //     if (isClockedIn) clearInterval(captureInterval);
+  //   };
+  // }, []);
+
+
 
   useEffect(() => {
-    fetchSessionHistory();
+    if (isElectron()) {
+      setElectronAvailable(true);
+      console.log("Electron detected, setting up screenshot listener.");
+      
+      // Add screenshot listener once on mount
+      window.electron.onScreenshotCaptured(async ({ success, path, buffer, error }) => {
+        if (success && buffer && sessionId) {
+          handleScreenshotUpload(buffer);
+        } else {
+          console.error("Screenshot capture failed:", error);
+        }
+      });
+    }
+  }, [sessionId]);
 
-    // Clean up interval when component unmounts
-    return () => {
-      if (captureInterval) clearInterval(captureInterval);
-    };
-  }, [captureInterval]);
+  useEffect(() => {
+    let timer;
+    if (isClockedIn && !isOnBreak) {
+      timer = setInterval(() => setCurrentDuration(prev => prev + 1), 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isClockedIn, isOnBreak]);
+
+  useEffect(() => {
+    let breakTimer;
+    if (isOnBreak) {
+      breakTimer = setInterval(() => setCurrentBreakDuration(prev => prev + 1), 1000);
+    }
+    return () => clearInterval(breakTimer);
+  }, [isOnBreak]);
+
+  const formatTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        fetchSessionHistory();
+      } else {
+        navigate('/login');
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
 
   const fetchSessionHistory = async () => {
+    if (!auth.currentUser) return;
     try {
       const sessionsRef = collection(firestore, 'work_sessions');
       const q = query(
@@ -41,13 +106,8 @@ const Dashboard = () => {
         orderBy('clockInTime', 'desc'),
         limit(10)
       );
-  
       const querySnapshot = await getDocs(q);
-      const sessions = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      
+      const sessions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSessionHistory(sessions);
     } catch (error) {
       console.error("Error fetching session history:", error);
@@ -55,170 +115,214 @@ const Dashboard = () => {
   };
 
   const clockIn = async () => {
+    if (!auth.currentUser) return;
     try {
-      const workSessionsRef = collection(firestore, 'work_sessions');
-      const docRef = await addDoc(workSessionsRef, {
+      const docRef = await addDoc(collection(firestore, 'work_sessions'), {
         userId: auth.currentUser.uid,
         clockInTime: Timestamp.now(),
         clockOutTime: null,
         breakTime: 0,
         isClockedIn: true,
       });
-  
+
       setIsClockedIn(true);
       setSessionId(docRef.id);
-  
-  
-      console.log("Clocked in successfully with session ID:", docRef.id);
-  
-      // Start capturing screenshots every minute if Electron is available
-      if (window.electron && window.electron.captureScreenshot) {
+      console.log('Clocked in with session ID:', docRef.id);
+
+      if (electronAvailable) {
         console.log("Setting up screenshot capture interval...");
         const interval = setInterval(() => {
           console.log("Attempting to capture screenshot...");
           window.electron.captureScreenshot();
         }, 60000); // 1-minute interval for screenshots
-  
+
         setCaptureInterval(interval);
-      } else {
-        console.error("Electron API or captureScreenshot function is not available.");
-      }
-  
-      // Ensure the screenshot listener is set up once
-      if (window.electron && window.electron.onScreenshotCaptured) {
-        console.log("Setting up screenshot capture listener...");
-        window.electron.onScreenshotCaptured(async ({ success, path, error }) => {
-          if (success) {
-            console.log("Screenshot captured:", path);
-            const userId = auth.currentUser.uid;
-            const screenshotRef = ref(storage, `screenshots/${userId}/${Date.now()}_screenshot.png`);
-            
-            try {
-              // Upload the screenshot to Firebase Storage
-              const response = await fetch(`file://${path}`);
-              const blob = await response.blob();
-              await uploadBytes(screenshotRef, blob);
-              const screenshotURL = await getDownloadURL(screenshotRef);
-  
-              // Save the screenshot URL in Firestore within the current session
-              const sessionRef = doc(firestore, 'work_sessions', sessionId);
-              const screenshotsCollectionRef = collection(sessionRef, 'screenshots');
-              await addDoc(screenshotsCollectionRef, {
-                url: screenshotURL,
-                timestamp: Timestamp.now(),
-              });
-  
-              console.log("Screenshot uploaded and URL saved to Firestore:", screenshotURL);
-            } catch (uploadError) {
-              console.error("Error uploading screenshot:", uploadError);
-            }
-          } else {
-            console.error("Screenshot capture failed:", error);
-          }
-        });
-      } else {
-        console.error("Electron API or onScreenshotCaptured function is not available.");
       }
     } catch (error) {
-      console.error("Error during clock-in:", error);
+      console.error('Error during clock-in:', error);
     }
   };
 
-  const clockOut = async () => {
-    if (!sessionId) return console.error("No active session found.");
 
-    try {
-      const sessionRef = doc(firestore, 'work_sessions', sessionId);
-      await updateDoc(sessionRef, {
-        clockOutTime: Timestamp.now(),
-        isClockedIn: false,
-      });
-
-      setIsClockedIn(false);
-      setSessionId(null);
-      fetchSessionHistory(); // Refresh session history after clock-out
-      console.log("Clocked out successfully from session ID:", sessionId);
-
-      // Stop capturing screenshots
-      if (captureInterval) {
-        clearInterval(captureInterval);
-        setCaptureInterval(null);
+  // Add this debugging useEffect
+useEffect(() => {
+  console.log("Electron availability:", electronAvailable);
+  if (electronAvailable) {
+    console.log("Setting up screenshot listener");
+    window.electron.onScreenshotCaptured((data) => {
+      console.log("Screenshot callback received data:", data);
+      if (data.success && data.buffer && sessionId) {
+        console.log("Processing successful screenshot");
+        handleScreenshotUpload(data.buffer);
+      } else {
+        console.error("Screenshot data invalid:", data);
       }
-    } catch (error) {
-      console.error("Error clocking out:", error);
+    });
+  }
+}, [electronAvailable, sessionId]);
+
+
+
+const handleScreenshotUpload = async (buffer) => {
+  try {
+    const blob = new Blob([buffer], { type: 'image/png' });
+    const screenshotRef = ref(storage, `screenshots/${auth.currentUser.uid}/${Date.now()}_screenshot.png`);
+    
+    await uploadBytes(screenshotRef, blob);
+    const screenshotURL = await getDownloadURL(screenshotRef);
+
+    await addDoc(collection(doc(firestore, 'work_sessions', sessionId), 'screenshots'), {
+      url: screenshotURL,
+      timestamp: Timestamp.now(),
+    });
+    console.log("Screenshot uploaded and URL saved to Firestore:", screenshotURL);
+  } catch (error) {
+    console.error("Error handling screenshot upload:", error);
+  }
+};
+
+
+
+
+
+const clockOut = async () => {
+  if (!sessionId) return;
+  try {
+    await updateDoc(doc(firestore, 'work_sessions', sessionId), {
+      clockOutTime: Timestamp.now(),
+      isClockedIn: false,
+      totalDuration: currentDuration,
+    });
+    setIsClockedIn(false);
+    setSessionId(null);
+    setCurrentDuration(0);
+    setCurrentBreakDuration(0);
+    fetchSessionHistory();
+
+    if (captureInterval) {
+      clearInterval(captureInterval);
+      setCaptureInterval(null);
     }
-  };
+  } catch (error) {
+    console.error("Error clocking out:", error);
+  }
+};
+
 
   const startBreak = async () => {
-    if (!sessionId) return console.error("No active session found.");
-    if (isOnBreak) return console.error("Already on break.");
-
+    if (!sessionId || isOnBreak) return;
     try {
-      const sessionRef = doc(firestore, 'work_sessions', sessionId);
-      await updateDoc(sessionRef, {
-        breakStartTime: Timestamp.now(),
-      });
-
+      await updateDoc(doc(firestore, 'work_sessions', sessionId), { breakStartTime: Timestamp.now() });
       setIsOnBreak(true);
-      console.log("Break started successfully.");
+      setCurrentBreakDuration(0);
     } catch (error) {
       console.error("Error starting break:", error);
     }
   };
 
   const endBreak = async () => {
-    if (!sessionId) return console.error("No active session found.");
-    if (!isOnBreak) return console.error("Not currently on break.");
-
+    if (!sessionId || !isOnBreak) return;
     try {
       const sessionRef = doc(firestore, 'work_sessions', sessionId);
       const sessionDoc = await getDoc(sessionRef);
-      const breakStartTime = sessionDoc.data().breakStartTime;
-      const breakDuration = Timestamp.now().seconds - breakStartTime.seconds;
+      const currentBreakTime = sessionDoc.data().breakTime || 0;
 
       await updateDoc(sessionRef, {
-        breakTime: sessionDoc.data().breakTime + breakDuration,
+        breakTime: currentBreakTime + currentBreakDuration,
         breakStartTime: null,
       });
-
       setIsOnBreak(false);
-      console.log("Break ended successfully.");
     } catch (error) {
       console.error("Error ending break:", error);
     }
   };
-
   return (
-    <div className="dashboard">
-      <h2>Dashboard</h2>
-      {isClockedIn ? (
+    <div className="container">
+      {user ? (
         <>
-          <button onClick={clockOut} className="clock-out-btn">Clock Out</button>
-          {isOnBreak ? (
-            <button onClick={endBreak} className="break-btn">End Break</button>
-          ) : (
-            <button onClick={startBreak} className="break-btn">Start Break</button>
+          <h1 className="title">Dashboard</h1>
+          
+          {/* Current Session Stats */}
+          {isClockedIn && (
+            <div className="current-session">
+              <div className="stats-grid">
+                <div className="stat-box">
+                  <h3 className="stat-title">Session Duration</h3>
+                  <p className="stat-value">{formatTime(currentDuration)}</p>
+                </div>
+                <div className="stat-box">
+                  <h3 className="stat-title">Current Break</h3>
+                  <p className="stat-value">{formatTime(currentBreakDuration)}</p>
+                </div>
+                <div className="stat-box">
+                  <h3 className="stat-title">Status</h3>
+                  <p className={`stat-value ${isOnBreak ? 'status-break' : 'status-working'}`}>
+                    {isOnBreak ? 'On Break' : 'Working'}
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
+          
+          {/* Action Buttons */}
+          <div className="button-container">
+            {!isClockedIn ? (
+              <button onClick={clockIn} className="button clock-in-button">
+                Clock In
+              </button>
+            ) : (
+              <>
+                <button onClick={clockOut} className="button clock-out-button">
+                  Clock Out
+                </button>
+                <button 
+                  onClick={isOnBreak ? endBreak : startBreak}
+                  className={`button ${isOnBreak ? 'end-break-button' : 'break-button'}`}
+                >
+                  {isOnBreak ? 'End Break' : 'Start Break'}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Session History */}
+          <div className="history-container">
+            <h2 className="history-title">Session History</h2>
+            <div className="history-list">
+              {sessionHistory.map((session) => (
+                <div key={session.id} className="history-item">
+                  <div className="history-grid">
+                    <div>
+                      <p className="history-label">Clock In</p>
+                      <p className="history-value">
+                        {new Date(session.clockInTime.seconds * 1000).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="history-label">Clock Out</p>
+                      <p className="history-value">
+                        {session.clockOutTime 
+                          ? new Date(session.clockOutTime.seconds * 1000).toLocaleString()
+                          : 'Ongoing'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="history-label">Break Time</p>
+                      <p className="history-value">
+                        {session.breakTime ? `${Math.floor(session.breakTime / 60)} mins` : '0 mins'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       ) : (
-        <button onClick={clockIn} className="clock-in-btn">Clock In</button>
+        <div>Please login to access the dashboard</div>
       )}
-
-      <div className="session-history">
-        <h3>Session History</h3>
-        <ul>
-          {sessionHistory.map((session) => (
-            <li key={session.id}>
-              <p>Clock In: {new Date(session.clockInTime.seconds * 1000).toLocaleString()}</p>
-              <p>Clock Out: {session.clockOutTime ? new Date(session.clockOutTime.seconds * 1000).toLocaleString() : 'Ongoing'}</p>
-              <p>Total Break Time: {session.breakTime ? `${Math.floor(session.breakTime / 60)} mins` : '0 mins'}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 };
-
 
 export default Dashboard;

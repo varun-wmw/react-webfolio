@@ -3,21 +3,18 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCBvhmggZE-m9kwsFJW0QH6zQDht5Uc7nQ",
-  authDomain: "workfolio-app.firebaseapp.com",
-  projectId: "workfolio-app",
-  storageBucket: "workfolio-app.appspot.com",
-  messagingSenderId: "907963772684",
-  appId: "1:907963772684:web:0fcf6938de691303cfa329",
-  measurementId: "G-7RN5MTSXZ4"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 
 // Export Firebase services
 export const auth = getAuth(app);

@@ -1,22 +1,24 @@
-// electron/preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
-console.log('Preload script is loading...'); // Confirm preload loading
+console.log("Preload script running...");
 
-contextBridge.exposeInMainWorld('electron', {
-  captureScreenshot: async () => {
-    console.log('captureScreenshot called from renderer process');
-    return await ipcRenderer.invoke('capture-screenshot');
+// Remove fs require since we'll handle the buffer in main process
+const electronBridge = {
+  captureScreenshot: () => {
+    console.log("Capture screenshot called from renderer");
+    return ipcRenderer.invoke('capture-screenshot');
   },
 
   onScreenshotCaptured: (callback) => {
-    console.log('Setting up screenshot capture listener');
-    ipcRenderer.on('screenshot-captured', (_event, data) => {
-      console.log('Screenshot captured:', data);
+    console.log("Setting up screenshot capture listener...");
+    ipcRenderer.removeAllListeners('screenshot-captured');
+    ipcRenderer.on('screenshot-captured', (event, data) => {
+      console.log('Screenshot captured event received in preload:', data);
       callback(data);
     });
-  },
+  }
+};
 
-});
-
-console.log('Electron API exposed to renderer process');
+console.log("Exposing electron bridge to main world...");
+contextBridge.exposeInMainWorld('electron', electronBridge);
+console.log("Preload script completed");

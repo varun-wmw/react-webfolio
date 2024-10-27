@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom'; // Use useNavigate instead
 import { auth, firestore } from './firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, doc, setDoc } from 'firebase/firestore';
+import './Register.css';
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
@@ -43,7 +44,7 @@ const Register = () => {
   };
 
   return (
-    <div>
+    <div className="register-container">
       <h2>Register</h2>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <form onSubmit={handleRegister}>

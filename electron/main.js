@@ -1,86 +1,78 @@
-// electron/main.js
-import { app, BrowserWindow, ipcMain, desktopCapturer } from 'electron';
-import path from 'path';
-import fs from 'fs';
+const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
+const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
-let clockInWindow;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'), // Adjust path to electron/preload.js if needed
+      // Update the preload path to be absolute
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false // Add this to ensure proper Node.js integration
     }
   });
 
-  mainWindow.loadURL('http://localhost:3000');
-  mainWindow.on('closed', () => { mainWindow = null; });
+  const isDev = process.env.NODE_ENV !== 'production';
+  const url = isDev ? 'http://localhost:3000' : `file://${path.join(__dirname, '../build/index.html')}`;
+  
+  console.log("Loading URL:", url);
+  mainWindow.loadURL(url);
+  
+  // Open DevTools for debugging
+  mainWindow.webContents.openDevTools();
 }
 
-function createClockInWindow() {
-  if (!clockInWindow) {
-    clockInWindow = new BrowserWindow({
-      width: 400,
-      height: 300,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'), 
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
 
-    clockInWindow.loadURL('http://localhost:3000');
-    clockInWindow.on('closed', () => { clockInWindow = null; });
-  } else {
-    clockInWindow.focus();
-  }
-}
-
-app.on('ready', createMainWindow);
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('activate', () => {
-  if (mainWindow === null) createMainWindow();
-});
-
-ipcMain.handle('open-clock-in-window', () => {
-  console.log('Received open-clock-in-window request');
-  createClockInWindow();
-  return true;
-});
+app.whenReady().then(createMainWindow);
 
 ipcMain.handle('capture-screenshot', async () => {
   console.log("Received capture-screenshot request");
   try {
-    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    // Wait for all sources to be available
+    const sources = await desktopCapturer.getSources({ 
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 } // Add proper resolution
+    });
+    
     if (!sources || sources.length === 0) {
       throw new Error("No screen sources available for screenshot");
     }
 
     const screen = sources[0];
     const screenshotPath = path.join(app.getPath('temp'), `${Date.now()}_screenshot.png`);
+    
+    // Ensure we have a thumbnail
+    if (!screen.thumbnail) {
+      throw new Error("No thumbnail available from screen source");
+    }
+
     const image = screen.thumbnail.toPNG();
 
-    return new Promise((resolve, reject) => {
-      fs.writeFile(screenshotPath, image, (error) => {
-        if (error) {
-          console.error("Failed to save screenshot:", error);
-          reject({ success: false, error: "Failed to save screenshot" });
-        } else {
-          console.log("Screenshot saved at:", screenshotPath);
-          resolve({ success: true, path: screenshotPath });
-        }
-      });
+    fs.writeFileSync(screenshotPath, image); // Use sync version for simplicity
+    console.log("Screenshot saved at:", screenshotPath);
+    
+    // Read the file back immediately
+    const imageBuffer = fs.readFileSync(screenshotPath);
+    
+    // Send both path and buffer
+    mainWindow.webContents.send('screenshot-captured', {
+      success: true,
+      path: screenshotPath,
+      buffer: imageBuffer
     });
+
+    return { success: true, path: screenshotPath };
   } catch (error) {
     console.error("Error capturing screenshot:", error);
-    return { success: false, error: error.message };
+    mainWindow.webContents.send('screenshot-captured', { 
+      success: false, 
+      error: error.message 
+    });
+    throw error; // Re-throw to be caught by the renderer
   }
 });

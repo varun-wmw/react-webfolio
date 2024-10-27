@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { firestore } from './firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import './AdminDashboard.css';
 
 const AdminDashboard = () => {
@@ -9,6 +9,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState('');
   const [filterEmployee, setFilterEmployee] = useState('');
+  const [selectedScreenshots, setSelectedScreenshots] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -18,7 +20,7 @@ const AdminDashboard = () => {
         const userData = {};
         userSnapshots.docs.forEach(doc => {
           const data = doc.data();
-          userData[doc.id] = `${data.firstName} ${data.lastName}`; // Store full name for each user ID
+          userData[doc.id] = `${data.firstName} ${data.lastName}`;
         });
         setUsers(userData);
       } catch (error) {
@@ -30,32 +32,26 @@ const AdminDashboard = () => {
       setLoading(true);
       try {
         const sessionsRef = collection(firestore, 'work_sessions');
-        let sessionsQuery = query(sessionsRef);
-  
-        // Apply date filter if specified
+        let sessionsQuery = query(sessionsRef, orderBy('clockInTime', 'desc')); // Order by time descending
+
+        // Apply date filter
         if (filterDate) {
           const startDate = new Date(filterDate);
           startDate.setHours(0, 0, 0, 0);
           const endDate = new Date(filterDate);
           endDate.setHours(23, 59, 59, 999);
-  
           sessionsQuery = query(
             sessionsQuery,
             where('clockInTime', '>=', startDate),
             where('clockInTime', '<=', endDate)
           );
         }
-  
-        // Apply employee ID filter (prefix match for substring matching)
+
+        // Apply exact employee ID filter
         if (filterEmployee) {
-          const endValue = filterEmployee + '\uf8ff';
-          sessionsQuery = query(
-            sessionsQuery,
-            where('userId', '>=', filterEmployee),
-            where('userId', '<', endValue)
-          );
+          sessionsQuery = query(sessionsQuery, where('userId', '==', filterEmployee));
         }
-  
+
         const sessionSnapshots = await getDocs(sessionsQuery);
         const sessionData = await Promise.all(sessionSnapshots.docs.map(async (sessionDoc) => {
           const session = { id: sessionDoc.id, ...sessionDoc.data() };
@@ -69,7 +65,6 @@ const AdminDashboard = () => {
         }));
 
         setSessions(sessionData);
-  
       } catch (error) {
         console.error("Error fetching session data:", error);
       }
@@ -86,10 +81,21 @@ const AdminDashboard = () => {
     return `${duration.toFixed(2)} minutes`;
   };
 
+  // Open modal to view screenshots
+  const openScreenshotModal = (screenshots) => {
+    setSelectedScreenshots(screenshots);
+    setIsModalOpen(true);
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedScreenshots([]);
+  };
   return (
     <div className="admin-dashboard">
       <h2>Admin Dashboard</h2>
-      
+
       <div className="filters">
         <label>Filter by Date:</label>
         <input
@@ -134,25 +140,34 @@ const AdminDashboard = () => {
                   <td>{calculateDuration(session.clockInTime ? session.clockInTime.toDate() : null, session.clockOutTime ? session.clockOutTime.toDate() : null)}</td>
                   <td>{session.breakTime ? `${session.breakTime} minutes` : '0 minutes'}</td>
                   <td>
-                    <div className="screenshot-container">
-                      {session.screenshots && session.screenshots.length > 0 ? (
-                        session.screenshots.map((screenshot, index) => (
-                          <img
-                            key={index}
-                            src={screenshot.url}
-                            alt="Screenshot"
-                          />
-                        ))
-                      ) : (
-                        <p>No screenshots available</p>
-                      )}
-                    </div>
+                    <button onClick={() => openScreenshotModal(session.screenshots)}>
+                      View Screenshots
+                    </button>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      )}
+
+      {/* Screenshot Modal */}
+      {isModalOpen && (
+        <div className="modal">
+          <div className="modal-content">
+            <button className="close-button" onClick={closeModal}>Close</button>
+            <div className="screenshot-popup-container">
+              {selectedScreenshots.map((screenshot, index) => (
+                <img
+                  key={index}
+                  src={screenshot.url}
+                  alt="Screenshot"
+                  className="screenshot-thumbnail"
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import Login from './components/Login';
@@ -10,58 +9,68 @@ import { auth, firestore } from './components/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 const App = () => {
+  const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Listen for auth state changes
   useEffect(() => {
-    const fetchUserRole = async (user) => {
-      try {
-        const userDocRef = doc(firestore, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (userDoc.exists()) {
-          setUserRole(userDoc.data().role);
-        } else {
-          console.error("User document does not exist");
-          setUserRole(null);
+    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+      setLoading(true);
+      setUser(currentUser);
+      
+      if (currentUser) {
+        try {
+          // Fetch user role only if it has not been set
+          if (!userRole) {
+            const userDocRef = doc(firestore, 'users', currentUser.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              setUserRole(userDoc.data().role);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching user role:", error);
         }
-      } catch (error) {
-        console.error("Error fetching user role:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        fetchUserRole(user);
       } else {
-        setUserRole(null);
-        setLoading(false);
+        setUserRole(null); // Reset role on logout
       }
+
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userRole]);
 
   if (loading) return <p>Loading...</p>;
 
-    return (
-      <Router>
-        {userRole && <Navbar userRole={userRole} />}
-        <Routes>
-          <Route path="/login" element={!userRole ? <Login /> : <Navigate to={userRole === 'admin' ? "/admin" : "/dashboard"} replace />} />
-          <Route path="/register" element={!userRole ? <Register /> : <Navigate to={userRole === 'admin' ? "/admin" : "/dashboard"} replace />} />
-          
-          {userRole === 'employee' && <Route path="/dashboard" element={<Dashboard />} />}
-          
-          {userRole === 'admin' && <Route path="/admin" element={<AdminDashboard />} />}
-  
-          {/* Redirect any other routes to appropriate dashboard based on role */}
-          <Route path="*" element={<Navigate to={userRole === 'admin' ? "/admin" : "/dashboard"} replace />} />
-        </Routes>
-      </Router>
-    );
+  return (
+    <Router>
+      {userRole && <Navbar userRole={userRole} />}
+      <Routes>
+        <Route 
+          path="/login" 
+          element={!user ? <Login /> : <Navigate to={userRole === 'admin' ? "/admin" : "/dashboard"} replace />} 
+        />
+        <Route 
+          path="/register" 
+          element={!user ? <Register /> : <Navigate to={userRole === 'admin' ? "/admin" : "/dashboard"} replace />} 
+        />
+        <Route 
+          path="/dashboard" 
+          element={user && userRole === 'employee' ? <Dashboard /> : <Navigate to="/login" replace />} 
+        />
+        <Route 
+          path="/admin" 
+          element={user && userRole === 'admin' ? <AdminDashboard /> : <Navigate to="/login" replace />} 
+        />
+        <Route 
+          path="*" 
+          element={<Navigate to={user ? (userRole === 'admin' ? "/admin" : "/dashboard") : "/login"} replace />} 
+        />
+      </Routes>
+    </Router>
+  );
 };
 
 export default App;

@@ -16,10 +16,7 @@ const Navbar = ({ userRole }) => {
   return (
     <nav>
       <h2>Workfolio</h2>
-      <div className="nav-links">
-        <Link to="/dashboard">Dashboard</Link>
-        {userRole === 'admin' && <Link to="/admin">Admin Dashboard</Link>}
-      </div>
+
       <button onClick={handleLogout}>Logout</button>
     </nav>
   );
