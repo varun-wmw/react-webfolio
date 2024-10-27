@@ -25,6 +25,7 @@ const Dashboard = () => {
   useEffect(() => {
     fetchSessionHistory();
 
+    // Clean up interval when component unmounts
     return () => {
       if (captureInterval) clearInterval(captureInterval);
     };
@@ -62,34 +63,42 @@ const Dashboard = () => {
         breakTime: 0,
         isClockedIn: true,
       });
-
+  
       setIsClockedIn(true);
       setSessionId(docRef.id);
-
-      // Open clock-in window if Electron is available
-      if (window.electron && window.electron.openClockInWindow) {
-        window.electron.openClockInWindow();
-      }
-
+  
+  
       console.log("Clocked in successfully with session ID:", docRef.id);
-
-      // Start capturing screenshots every minute
-      const interval = setInterval(() => {
-        if (window.electron && window.electron.captureScreenshot) {
-          console.log("Screenshot taken")
-          window.electron.captureScreenshot(); // Trigger screenshot capture
-
-          window.electron.onScreenshotCaptured(async ({ success, path, error }) => {
-            if (success) {
-              const userId = auth.currentUser.uid;
-              const screenshotRef = ref(storage, `screenshots/${userId}/${Date.now()}_screenshot.png`);
-              
+  
+      // Start capturing screenshots every minute if Electron is available
+      if (window.electron && window.electron.captureScreenshot) {
+        console.log("Setting up screenshot capture interval...");
+        const interval = setInterval(() => {
+          console.log("Attempting to capture screenshot...");
+          window.electron.captureScreenshot();
+        }, 60000); // 1-minute interval for screenshots
+  
+        setCaptureInterval(interval);
+      } else {
+        console.error("Electron API or captureScreenshot function is not available.");
+      }
+  
+      // Ensure the screenshot listener is set up once
+      if (window.electron && window.electron.onScreenshotCaptured) {
+        console.log("Setting up screenshot capture listener...");
+        window.electron.onScreenshotCaptured(async ({ success, path, error }) => {
+          if (success) {
+            console.log("Screenshot captured:", path);
+            const userId = auth.currentUser.uid;
+            const screenshotRef = ref(storage, `screenshots/${userId}/${Date.now()}_screenshot.png`);
+            
+            try {
               // Upload the screenshot to Firebase Storage
               const response = await fetch(`file://${path}`);
               const blob = await response.blob();
               await uploadBytes(screenshotRef, blob);
-              const screenshotURL = await getDownloadURL(screenshotRef); // Get URL of uploaded screenshot
-
+              const screenshotURL = await getDownloadURL(screenshotRef);
+  
               // Save the screenshot URL in Firestore within the current session
               const sessionRef = doc(firestore, 'work_sessions', sessionId);
               const screenshotsCollectionRef = collection(sessionRef, 'screenshots');
@@ -97,18 +106,20 @@ const Dashboard = () => {
                 url: screenshotURL,
                 timestamp: Timestamp.now(),
               });
-
+  
               console.log("Screenshot uploaded and URL saved to Firestore:", screenshotURL);
-            } else {
-              console.error("Screenshot capture failed:", error);
+            } catch (uploadError) {
+              console.error("Error uploading screenshot:", uploadError);
             }
-          });
-        }
-      }, 60000); // 1-minute interval for screenshots
-
-      setCaptureInterval(interval);
+          } else {
+            console.error("Screenshot capture failed:", error);
+          }
+        });
+      } else {
+        console.error("Electron API or onScreenshotCaptured function is not available.");
+      }
     } catch (error) {
-      console.error("Error clocking in:", error);
+      console.error("Error during clock-in:", error);
     }
   };
 

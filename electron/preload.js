@@ -1,37 +1,22 @@
+// electron/preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
+console.log('Preload script is loading...'); // Confirm preload loading
+
 contextBridge.exposeInMainWorld('electron', {
-  // Capture a screenshot
-  captureScreenshot: () => {
-    console.log('captureScreenshot called');
-    ipcRenderer.send('capture-screenshot');
+  captureScreenshot: async () => {
+    console.log('captureScreenshot called from renderer process');
+    return await ipcRenderer.invoke('capture-screenshot');
   },
 
-  // Listener for receiving the screenshot file path
   onScreenshotCaptured: (callback) => {
-    ipcRenderer.on('screenshot-captured', (event, path) => {
-      console.log('Screenshot captured:', path);
-      callback(path);
+    console.log('Setting up screenshot capture listener');
+    ipcRenderer.on('screenshot-captured', (_event, data) => {
+      console.log('Screenshot captured:', data);
+      callback(data);
     });
   },
 
-  // Opens the clock-in window
-  openClockInWindow: () => {
-    console.log('openClockInWindow called');
-    ipcRenderer.send('open-clock-in-window');
-  },
-
-  // General-purpose send function
-  send: (channel, data) => {
-    console.log(`Sending IPC message to ${channel} with data:`, data);
-    ipcRenderer.send(channel, data);
-  },
-
-  // General-purpose receive function
-  on: (channel, callback) => {
-    ipcRenderer.on(channel, (event, ...args) => {
-      console.log(`Received IPC message from ${channel} with args:`, args);
-      callback(...args);
-    });
-  },
 });
+
+console.log('Electron API exposed to renderer process');

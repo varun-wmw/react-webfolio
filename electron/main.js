@@ -1,3 +1,4 @@
+// electron/main.js
 const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -10,17 +11,16 @@ function createMainWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'), 
+      preload: path.join(__dirname, 'preload.js'), // Adjust path to electron/preload.js if needed
       contextIsolation: true,
       nodeIntegration: false,
     }
   });
 
-  mainWindow.loadURL('http://localhost:3000'); // Load your React app here
+  mainWindow.loadURL('http://localhost:3000');
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-// Function to create the Clock-In Window
 function createClockInWindow() {
   if (!clockInWindow) {
     clockInWindow = new BrowserWindow({
@@ -33,7 +33,7 @@ function createClockInWindow() {
       },
     });
 
-    clockInWindow.loadURL('http://localhost:3000/clock-in'); // Optional: direct to a specific clock-in route
+    clockInWindow.loadURL('http://localhost:3000');
     clockInWindow.on('closed', () => { clockInWindow = null; });
   } else {
     clockInWindow.focus();
@@ -50,37 +50,37 @@ app.on('activate', () => {
   if (mainWindow === null) createMainWindow();
 });
 
-// Listen for the "open-clock-in-window" event to create the clock-in window
-ipcMain.on('open-clock-in-window', () => {
+ipcMain.handle('open-clock-in-window', () => {
   console.log('Received open-clock-in-window request');
   createClockInWindow();
+  return true;
 });
 
-// Listen for the "capture-screenshot" event
-ipcMain.on('capture-screenshot', async (event) => {
-  console.log('Received capture-screenshot request');
-
+ipcMain.handle('capture-screenshot', async () => {
+  console.log("Received capture-screenshot request");
   try {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     if (!sources || sources.length === 0) {
-      throw new Error('No screen sources available for screenshot');
+      throw new Error("No screen sources available for screenshot");
     }
 
-    const screen = sources[0]; // Capture the first screen source
+    const screen = sources[0];
     const screenshotPath = path.join(app.getPath('temp'), `${Date.now()}_screenshot.png`);
     const image = screen.thumbnail.toPNG();
 
-    fs.writeFile(screenshotPath, image, (error) => {
-      if (error) {
-        console.error('Failed to save screenshot:', error);
-        event.reply('screenshot-captured', { success: false, error: 'Failed to save screenshot' });
-      } else {
-        console.log('Screenshot saved at:', screenshotPath);
-        event.reply('screenshot-captured', { success: true, path: screenshotPath });
-      }
+    return new Promise((resolve, reject) => {
+      fs.writeFile(screenshotPath, image, (error) => {
+        if (error) {
+          console.error("Failed to save screenshot:", error);
+          reject({ success: false, error: "Failed to save screenshot" });
+        } else {
+          console.log("Screenshot saved at:", screenshotPath);
+          resolve({ success: true, path: screenshotPath });
+        }
+      });
     });
   } catch (error) {
-    console.error('Error capturing screenshot:', error);
-    event.reply('screenshot-captured', { success: false, error: error.message });
+    console.error("Error capturing screenshot:", error);
+    return { success: false, error: error.message };
   }
 });
