@@ -24,7 +24,7 @@ function createMainWindow() {
   mainWindow.loadURL(url);
   
   // Open DevTools for debugging
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 }
 
 
